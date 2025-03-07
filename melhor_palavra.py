@@ -171,9 +171,9 @@ if __name__ == "__main__":
     os.system('cls')
     n_simulacoes = 50
     melhores_palavras, piores_palavras = encontrar_melhor_palavra_inicial(n_simulacoes)
-    print(f"As 10 melhores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in melhores_palavras[:10]]}")
+    print(f"As 3 melhores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in melhores_palavras[:3]]}")
     print(f'Melhor palavra: ', [melhores_palavras[0][0]])
-    print(f"As 10 piores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in piores_palavras[:10]]}")
+    print(f"As 3 piores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in piores_palavras[:3]]}")
     print(f'Pior palavra: ', [piores_palavras[0][0]])
 
     print([melhores_palavras[0][0], piores_palavras[0][0]])
