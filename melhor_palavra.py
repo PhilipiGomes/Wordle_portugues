@@ -163,17 +163,22 @@ def encontrar_melhor_palavra_inicial(n_simulacoes_por_palavra):
     segundos = (elapsed - ((horas * 3600) + (minutos * 60)))
     print(f"Tempo total: {int(horas)}h, {int(minutos)}min, {segundos:.5f}s")
     print(f'Média por simulação: {elapsed / len(palavras) / n_simulacoes_por_palavra:.5f}s')
+    print()
     print(f'Média por palavra: {elapsed / len(palavras):.5f}s')
     return melhores_palavras, piores_palavras
 
 
 if __name__ == "__main__":
     os.system('cls')
-    n_simulacoes = 50
+    n_simulacoes = 1
     melhores_palavras, piores_palavras = encontrar_melhor_palavra_inicial(n_simulacoes)
+    print()
     print(f"As 3 melhores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in melhores_palavras[:3]]}")
+    print()
     print(f'Melhor palavra: ', [melhores_palavras[0][0]])
+    print()
     print(f"As 3 piores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in piores_palavras[:3]]}")
+    print()
     print(f'Pior palavra: ', [piores_palavras[0][0]])
-
+    print()
     print([melhores_palavras[0][0], piores_palavras[0][0]])
