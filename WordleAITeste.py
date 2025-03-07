@@ -2,20 +2,20 @@ import random
 from collections import Counter
 import time
 import matplotlib.pyplot as plt
+import os
+from tqdm import tqdm  # Importando tqdm para a barra de progresso
 
 from lista import palavras, melhor_palavra
 
 
 # Funções auxiliares
 def escolher_palavra(tamanho=None):
-    palavras_filtradas = [p.lower() for p in palavras if len(p) == (tamanho if tamanho else len(palavras[0]))]
-    return random.choice(palavras_filtradas)
+    # Filtra palavras com o tamanho correto, sem precisar fazer lower() em todas as palavras
+    palavras_filtradas = list(filter(lambda p: len(p) == (tamanho if tamanho else len(palavras[0])), palavras))
+    return random.choice(palavras_filtradas).lower()
 
 
 def verificar_palavra(palavra_secreta, tentativa):
-    palavra_secreta = palavra_secreta.lower()
-    tentativa = tentativa.lower()
-
     if len(palavra_secreta) != len(tentativa):
         raise ValueError("A tentativa e a palavra secreta devem ter o mesmo comprimento.")
 
@@ -23,64 +23,59 @@ def verificar_palavra(palavra_secreta, tentativa):
     palavra_secreta_lista = list(palavra_secreta)
     tentativa_lista = list(tentativa)
 
+    # Primeira iteração para marcas "🟩"
     for i, letra in enumerate(tentativa):
         if letra == palavra_secreta[i]:
             resultado[i] = "🟩"
             palavra_secreta_lista[i] = None
             tentativa_lista[i] = None
 
+    # Segunda iteração para marcas "🟨"
     for i, letra in enumerate(tentativa):
-        if tentativa_lista[i] is not None:
-            if letra in palavra_secreta_lista:
-                resultado[i] = "🟨"
-                palavra_secreta_lista[palavra_secreta_lista.index(letra)] = None
+        if tentativa_lista[i] is not None and letra in palavra_secreta_lista:
+            resultado[i] = "🟨"
+            palavra_secreta_lista[palavra_secreta_lista.index(letra)] = None
 
     return "".join(resultado)
 
 
 def filtrar_palavras(lista_palavra, tentativa, resultado):
-    tentativa = tentativa.lower()
-    resultado = resultado.lower()
-    palavras_filtradas = []
+    letras_confirmadas = {}
+    letras_invalidas = set()
 
-    for palavra in lista_palavra:
-        palavra = palavra.lower()
-        letras_confirmadas = {}
-        letras_invalidas = set()
-        palavra_valida = True
-
-        for i, letra in enumerate(tentativa):
-            if resultado[i] == "🟩":
-                if palavra[i] != letra:
-                    palavra_valida = False
-                    break
-                letras_confirmadas[letra] = letras_confirmadas.get(letra, 0) + 1
-
-        if not palavra_valida:
-            continue
-
-        for i, letra in enumerate(tentativa):
-            if resultado[i] == "🟨":
-                if letra not in palavra or palavra[i] == letra:
-                    palavra_valida = False
-                    break
-                letras_confirmadas[letra] = letras_confirmadas.get(letra, 0) + 1
-
-        if not palavra_valida:
-            continue
-
-        for i, letra in enumerate(tentativa):
-            if resultado[i] == "⬜":
-                if letra in palavra:
-                    if palavra.count(letra) > letras_confirmadas.get(letra, 0):
-                        palavra_valida = False
-                        break
-                    letras_invalidas.add(letra)
-
-        if palavra_valida:
-            palavras_filtradas.append(palavra)
-
+    palavras_filtradas = [
+        palavra for palavra in lista_palavra
+        if valida_palavra(palavra, tentativa, resultado, letras_confirmadas, letras_invalidas)
+    ]
     return palavras_filtradas
+
+
+def valida_palavra(palavra, tentativa, resultado, letras_confirmadas, letras_invalidas):
+    palavra = palavra.lower()
+    palavra_valida = True
+
+    # Processa letras confirmadas (🟩)
+    for i, letra in enumerate(tentativa):
+        if resultado[i] == "🟩":
+            if palavra[i] != letra:
+                return False
+            letras_confirmadas[letra] = letras_confirmadas.get(letra, 0) + 1
+
+    # Processa letras parcialmente corretas (🟨)
+    for i, letra in enumerate(tentativa):
+        if resultado[i] == "🟨":
+            if letra not in palavra or palavra[i] == letra:
+                return False
+            letras_confirmadas[letra] = letras_confirmadas.get(letra, 0) + 1
+
+    # Processa letras incorretas (⬜)
+    for i, letra in enumerate(tentativa):
+        if resultado[i] == "⬜" and letra in palavra:
+            if palavra.count(letra) > letras_confirmadas.get(letra, 0):
+                return False
+            letras_invalidas.add(letra)
+
+    return palavra_valida
 
 
 def melhor_tentativa(palavras_possiveis):
@@ -97,7 +92,6 @@ def melhor_tentativa(palavras_possiveis):
     # Pontua as palavras com base nas frequências
     def pontuar_palavra(palavra):
         score = sum(contador_posicional[i][letra] for i, letra in enumerate(palavra))
-        # Penaliza palavras com letras repetidas (não favorece tanto duplicatas)
         score -= len(set(palavra)) - len(palavra)
         return score
 
@@ -108,52 +102,53 @@ def melhor_tentativa(palavras_possiveis):
 def jogar_wordle(ia_jogar=False):
     palavra_secreta = escolher_palavra()
     tentativas = []
-    tentativa_atual = ""
     tentativas_restantes = 6
-    fim_de_jogo = False
     palavras_possiveis = [p for p in palavras if len(p) == len(palavra_secreta)]
 
-    while True:
-        if ia_jogar and not fim_de_jogo:
+    while tentativas_restantes > 0:
+        tentativa_atual = ""
+        if ia_jogar:
             if tentativas_restantes == 6:
                 tentativa_atual = melhor_palavra[0]
-            else:
-                if palavras_possiveis:
-                    tentativa_atual = melhor_tentativa(palavras_possiveis)
+            elif palavras_possiveis:
+                tentativa_atual = melhor_tentativa(palavras_possiveis)
 
-            if tentativa_atual:
-                resultado = verificar_palavra(palavra_secreta, tentativa_atual)
-                tentativas.append((tentativa_atual, resultado))
-                tentativas_restantes -= 1
-                palavras_possiveis = filtrar_palavras(palavras_possiveis, tentativa_atual, resultado)
+        if tentativa_atual:
+            resultado = verificar_palavra(palavra_secreta, tentativa_atual)
+            tentativas.append((tentativa_atual, resultado))
+            tentativas_restantes -= 1
+            palavras_possiveis = filtrar_palavras(palavras_possiveis, tentativa_atual, resultado)
 
-                if tentativa_atual == palavra_secreta or tentativas_restantes == 0:
-                    return 6 - tentativas_restantes
-                tentativa_atual = ""
+            if tentativa_atual == palavra_secreta:
+                return 6 - tentativas_restantes
+
+    return 6 - tentativas_restantes
 
 
 def simular_jogos(n):
     start = time.time()
     vitorias_por_tentativas = []
 
-    for i in range(n):
+    # Usando tqdm para mostrar a barra de progresso
+    for i in tqdm(range(n), desc="Simulando jogos", ncols=100):  # Barra de progresso com tqdm
         tentativas_usadas = jogar_wordle(ia_jogar=True)
         vitorias_por_tentativas.append(tentativas_usadas)
-        porcentagem = (i/n)*100
-        if porcentagem % 5 == 0:
-            print(f'{porcentagem}%')
-        i += 1
+
     elapsed = time.time() - start
     tempo_medio = elapsed / n
-    print(f"Tempo para executar todos os jogos: {elapsed:.5f}")
-    print(f"Tempo médio de execução por jogo: {tempo_medio:.5f}")
+    os.system('cls')  # Limpa a tela após o término da execução
+    print(f"Tempo total para executar todos os jogos: {elapsed:.5f}s")
+    print(f"Tempo médio por jogo: {tempo_medio:.5f}s")
     return vitorias_por_tentativas
 
 
+# Limpar a tela antes de iniciar a simulação
+os.system('cls')
+
 # Configurar o número de jogos para simular
-numero_de_jogos = 2000
+numero_de_jogos = 3000
 resultados = simular_jogos(numero_de_jogos)
-media_melhor_palavra = sum(resultados)/numero_de_jogos
+media_melhor_palavra = sum(resultados) / numero_de_jogos
 print(f'Média de tentativas da palavra {melhor_palavra[0]}: {media_melhor_palavra}')
 
 # Contar o número de vitórias por número de tentativas
