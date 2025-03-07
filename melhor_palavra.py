@@ -119,13 +119,10 @@ def jogar_wordle(ia_jogar=False, palavra_inicial=None):
 
             if tentativa_atual == palavra_secreta:
                 return 6 - tentativas_restantes
-            if tentativas_restantes == 0:
-                return 7
         else:
             break
+    return None
 
-
-palavras_testadas = []
 
 # Função para simular os jogos
 def simular_jogos_com_palavra_inicial_func(palavra_inicial, n_simulacoes_por_palavra):
@@ -133,11 +130,11 @@ def simular_jogos_com_palavra_inicial_func(palavra_inicial, n_simulacoes_por_pal
 
 def simular_jogos_com_palavra_inicial(n, palavra_inicial):
     resultados = []
-    for i in range(n):  # Barra de progresso
+    for _ in range(n):
         tentativas_usadas = jogar_wordle(ia_jogar=True, palavra_inicial=palavra_inicial)
-        resultados.append(tentativas_usadas)
-
-    return sum(resultados) / len(resultados)
+        if tentativas_usadas is not None:
+            resultados.append(tentativas_usadas)
+    return (sum(resultados) / len(resultados)) if len(resultados) > 0 else sum(resultados)
 
 
 # Função auxiliar para ser usada no `map` (evita o uso de `lambda`)
@@ -152,22 +149,31 @@ def encontrar_melhor_palavra_inicial(n_simulacoes_por_palavra):
     # Paralelizando a simulação com ProcessPoolExecutor
     with ProcessPoolExecutor() as executor:
         # Substituímos a função lambda pela função auxiliar
-        resultados = list(tqdm(executor.map(map_simular_palavra, palavras, [n_simulacoes_por_palavra]*len(palavras)), desc="Simulando jogos", ncols=100))
+        resultados = list(tqdm(executor.map(map_simular_palavra, palavras, [n_simulacoes_por_palavra]*len(palavras)), desc="Simulando jogos", ncols=100, total=len(palavras)))
 
     # Organiza as palavras por melhor desempenho
     melhores_palavras = sorted(resultados, key=lambda x: x[1])
+    piores_palavras = sorted(resultados, key=lambda x: x[1], reverse=True)
 
     finish = time.time()
     elapsed = finish - start
     os.system('cls')
-    print(f"Tempo total: {elapsed:.5f}s")
+    horas = elapsed // 3600
+    minutos = (elapsed - (horas * 3600)) // 60
+    segundos = (elapsed - ((horas * 3600) + (minutos * 60)))
+    print(f"Tempo total: {int(horas)}h, {int(minutos)}min, {segundos:.5f}s")
     print(f'Média por simulação: {elapsed / len(palavras) / n_simulacoes_por_palavra:.5f}s')
     print(f'Média por palavra: {elapsed / len(palavras):.5f}s')
-    return melhores_palavras
+    return melhores_palavras, piores_palavras
 
 
 if __name__ == "__main__":
     os.system('cls')
-    n_simulacoes = 20
-    melhores_palavras = encontrar_melhor_palavra_inicial(n_simulacoes)
+    n_simulacoes = 50
+    melhores_palavras, piores_palavras = encontrar_melhor_palavra_inicial(n_simulacoes)
     print(f"As 10 melhores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in melhores_palavras[:10]]}")
+    print(f'Melhor palavra: ', [melhores_palavras[0][0]])
+    print(f"As 10 piores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in piores_palavras[:10]]}")
+    print(f'Pior palavra: ', [piores_palavras[0][0]])
+
+    print([melhores_palavras[0][0], piores_palavras[0][0]])

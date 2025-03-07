@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import os
 from tqdm import tqdm  # Importando tqdm para a barra de progresso
 
-from lista import palavras, melhor_palavra
+from lista import palavras, melhores_palavras
 
 
 # Funções auxiliares
@@ -91,9 +91,7 @@ def melhor_tentativa(palavras_possiveis):
 
     # Pontua as palavras com base nas frequências
     def pontuar_palavra(palavra):
-        score = sum(contador_posicional[i][letra] for i, letra in enumerate(palavra))
-        score -= len(set(palavra)) - len(palavra)
-        return score
+        return sum(contador_posicional[i][letra] for i, letra in enumerate(palavra))
 
     # Retorna a palavra com a maior pontuação
     return max(palavras_possiveis, key=pontuar_palavra)
@@ -109,7 +107,7 @@ def jogar_wordle(ia_jogar=False):
         tentativa_atual = ""
         if ia_jogar:
             if tentativas_restantes == 6:
-                tentativa_atual = melhor_palavra[0]
+                tentativa_atual = melhores_palavras[0]
             elif palavras_possiveis:
                 tentativa_atual = melhor_tentativa(palavras_possiveis)
 
@@ -122,7 +120,7 @@ def jogar_wordle(ia_jogar=False):
             if tentativa_atual == palavra_secreta:
                 return 6 - tentativas_restantes
 
-    return 6 - tentativas_restantes
+    return None  # Alterado para None quando houver derrota
 
 
 def simular_jogos(n):
@@ -130,14 +128,18 @@ def simular_jogos(n):
     vitorias_por_tentativas = []
 
     # Usando tqdm para mostrar a barra de progresso
-    for i in tqdm(range(n), desc="Simulando jogos", ncols=100):  # Barra de progresso com tqdm
+    for _ in tqdm(range(n), desc="Simulando jogos", ncols=100):  # Barra de progresso com tqdm
         tentativas_usadas = jogar_wordle(ia_jogar=True)
-        vitorias_por_tentativas.append(tentativas_usadas)
+        if tentativas_usadas is not None:  # Ignora derrotas
+            vitorias_por_tentativas.append(tentativas_usadas)
 
     elapsed = time.time() - start
     tempo_medio = elapsed / n
     os.system('cls')  # Limpa a tela após o término da execução
-    print(f"Tempo total para executar todos os jogos: {elapsed:.5f}s")
+    horas = elapsed // 3600
+    minutos = (elapsed - (horas * 3600)) // 60
+    segundos = (elapsed - ((horas * 3600) + (minutos * 60)))
+    print(f"Tempo total: {int(horas)}h, {int(minutos)}min, {segundos:.5f}s")
     print(f"Tempo médio por jogo: {tempo_medio:.5f}s")
     return vitorias_por_tentativas
 
@@ -146,10 +148,11 @@ def simular_jogos(n):
 os.system('cls')
 
 # Configurar o número de jogos para simular
-numero_de_jogos = 3000
+numero_de_jogos = 4000
 resultados = simular_jogos(numero_de_jogos)
-media_melhor_palavra = sum(resultados) / numero_de_jogos
-print(f'Média de tentativas da palavra {melhor_palavra[0]}: {media_melhor_palavra}')
+media_melhores_palavras = sum(resultados) / len(resultados)
+print(f'Jogos simulados: {numero_de_jogos}, Jogos ganhos: {len(resultados)}')
+print(f'Média de tentativas da palavra {melhores_palavras[0]}: {media_melhores_palavras}')
 
 # Contar o número de vitórias por número de tentativas
 contagem_vitorias = Counter(resultados)
