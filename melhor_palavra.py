@@ -183,7 +183,7 @@ if __name__ == "__main__":
     # trunk-ignore(bandit/B605)
     os.system("cls" if os.name == "nt" else "clear")
     random.seed()
-    n_simulacoes = 10
+    n_simulacoes = 50
     melhores, piores = encontrar_melhor_palavra_inicial(n_simulacoes)
     print()
     print("Top 3 melhores:", melhores[:3])
