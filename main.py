@@ -1,263 +1,288 @@
 import random
-import time
 from collections import Counter
 
 import pygame
 
-from lista import melhores_palavras, palavras
+from lista import (  # mesmas premissas: minúsculas, mesmo tamanho
+    melhores_palavras,
+    palavras,
+)
+
+# -------------------- Pré-processamento (rápido e robusto) --------------------
+WORDS = palavras
+N_WORDS = len(WORDS)
+WORD_LEN = len(WORDS[0]) if N_WORDS else 0
+
+# Alfabeto dinâmico (suporta acentos/ç)
+ALPHABET = sorted({ch for w in WORDS for ch in w})
+ALPHABET_IDX = {ch: i for i, ch in enumerate(ALPHABET)}
+ALPHABET_SIZE = len(ALPHABET)
+
+# Representações pré-calculadas
+WORD_CHARS = [list(w) for w in WORDS]
 
 
-# Funções auxiliares
+def _counts_arr(word):
+    arr = [0] * ALPHABET_SIZE
+    for ch in word:
+        arr[ALPHABET_IDX[ch]] += 1
+    return arr
+
+
+WORD_COUNTS_ARR = [_counts_arr(w) for w in WORDS]
+WORD_INDEX = {w: i for i, w in enumerate(WORDS)}
+
+
+# -------------------- Lógica do jogo (otimizada) --------------------
 def escolher_palavra():
     # trunk-ignore(bandit/B311)
-    return random.choice(palavras)
+    return random.choice(WORDS)
 
 
-def verificar_palavra(palavra_secreta, tentativa):
-    resultado = ["⬜"] * len(tentativa)
-    palavra_secreta_lista = list(palavra_secreta)
-    tentativa_lista = list(tentativa)
+def compute_result_fast(secret_chars, secret_counts_arr, attempt):
+    """
+    Gera string com emojis (🟩🟨⬜). Usa arrays de contagem para evitar count()/index().
+    """
+    counts = secret_counts_arr[:]  # cópia rápida
+    res = ["⬜"] * WORD_LEN
 
-    # Primeira passada: marca os acertos exatos (🟩)
-    for i in range(len(tentativa)):
-        if tentativa[i] == palavra_secreta[i]:
-            resultado[i] = "🟩"
-            palavra_secreta_lista[i] = None
-            tentativa_lista[i] = None
+    # verdes
+    for i, ch in enumerate(attempt):
+        if ch == secret_chars[i]:
+            res[i] = "🟩"
+            counts[ALPHABET_IDX[ch]] -= 1
 
-    # Segunda passada: marca os acertos parciais (🟨)
-    for i in range(len(tentativa)):
+    # amarelos
+    for i, ch in enumerate(attempt):
+        if res[i] == "⬜":
+            idx = ALPHABET_IDX.get(ch)
+            if idx is not None and counts[idx] > 0:
+                res[i] = "🟨"
+                counts[idx] -= 1
+
+    return "".join(res)
+
+
+def filtrar_palavras(candidatos, tentativa, resultado):
+    """Mantém só candidatos que produzem `resultado` para `tentativa`."""
+    out = []
+    for w in candidatos:
+        idx = WORD_INDEX[w]
         if (
-            tentativa_lista[i] is not None
-            and tentativa_lista[i] in palavra_secreta_lista
+            compute_result_fast(WORD_CHARS[idx], WORD_COUNTS_ARR[idx], tentativa)
+            == resultado
         ):
-            resultado[i] = "🟨"
-            palavra_secreta_lista[palavra_secreta_lista.index(tentativa_lista[i])] = (
-                None
-            )
-
-    return "".join(resultado)
+            out.append(w)
+    return out
 
 
 def melhor_tentativa(palavras_possiveis):
+    """Heurística por frequência posicional; penaliza repetições."""
     if not palavras_possiveis:
-        return ""  # Retorna uma string vazia se não houver palavras possíveis
+        return ""
+    L = WORD_LEN
+    pos_counters = [Counter() for _ in range(L)]
+    for w in palavras_possiveis:
+        for i, ch in enumerate(w):
+            pos_counters[i][ch] += 1
 
-    # Contador de letras ponderado por posição
-    contador_posicional = [Counter() for _ in range(len(palavras_possiveis[0]))]
+    def score(word):
+        s = 0
+        seen = set()
+        for i, ch in enumerate(word):
+            s += pos_counters[i].get(ch, 0)
+            # penaliza letras repetidas (mais exploração)
+            if ch in seen:
+                s -= 1
+            else:
+                seen.add(ch)
+        return s
 
-    for palavra in palavras_possiveis:
-        for i, letra in enumerate(palavra):
-            contador_posicional[i][letra] += 1
-
-    # Função para pontuar a palavra
-    def pontuar_palavra(palavra):
-        score = sum(contador_posicional[i][letra] for i, letra in enumerate(palavra))
-        # Penaliza palavras com letras repetidas para variar mais as tentativas
-        score -= len(set(palavra)) - len(palavra)
-        return score
-
-    # Escolhe a palavra com maior pontuação baseada na frequência ponderada por posição
-    return max(palavras_possiveis, key=pontuar_palavra)
-
-
-def filtrar_palavras(palavras, tentativa, resultado):
-    palavras_filtradas = []
-
-    for palavra in palavras:
-        palavra_valida = True
-        letras_confirmadas = {}
-
-        # Primeira passada: validar 🟩 e contar letras confirmadas
-        for i, letra in enumerate(tentativa):
-            if resultado[i] == "🟩":
-                if palavra[i] != letra:
-                    palavra_valida = False
-                    break
-                letras_confirmadas[letra] = letras_confirmadas.get(letra, 0) + 1
-
-        if not palavra_valida:
-            continue
-
-        # Segunda passada: validar 🟨 e garantir que estão em outras posições
-        for i, letra in enumerate(tentativa):
-            if resultado[i] == "🟨":
-                if letra not in palavra or palavra[i] == letra:
-                    palavra_valida = False
-                    break
-                letras_confirmadas[letra] = letras_confirmadas.get(letra, 0) + 1
-
-        if not palavra_valida:
-            continue
-
-        # Terceira passada: validar ⬜ (não deve estar presente ou contar corretamente se for letra repetida)
-        for i, letra in enumerate(tentativa):
-            if resultado[i] == "⬜":
-                if letra in palavra:
-                    if palavra.count(letra) > letras_confirmadas.get(letra, 0):
-                        palavra_valida = False
-                        break
-
-        if palavra_valida:
-            palavras_filtradas.append(palavra)
-
-    return palavras_filtradas
+    return max(palavras_possiveis, key=score)
 
 
+# -------------------- Pygame: constantes + cache --------------------
+CELL = 60
+MARGIN_X = 50
+MARGIN_Y = 50
+ROW_SPACING = 80
+COL_SPACING = CELL
+WINDOW_W = MARGIN_X * 2 + WORD_LEN * (CELL + 10)
+WINDOW_H = MARGIN_Y * 2 + 6 * ROW_SPACING
+
+# cores
+BRANCO = (255, 255, 255)
+PRETO = (0, 0, 0)
+VERDE = (0, 185, 85)
+AMARELO = (245, 200, 20)
+CINZA = (100, 100, 100)
+
+# Precompute cell positions to avoid recalcular no desenho
+CELL_POS = [
+    [(MARGIN_X + j * (CELL + 10), MARGIN_Y + i * ROW_SPACING) for j in range(WORD_LEN)]
+    for i in range(6)
+]
+
+
+# -------------------- Função principal (melhor prática de loop) --------------------
 def jogar_wordle(ia_jogar=False):
     pygame.init()
+    screen = pygame.display.set_mode((WINDOW_W, WINDOW_H))
+    pygame.display.set_caption("Wordle PT (otimizado)")
+    font = pygame.font.Font(None, CELL - 10)
 
-    # Definir cores
-    BRANCO = (255, 255, 255)
-    PRETO = (0, 0, 0)
-    VERDE = (0, 255, 0)
-    AMARELO = (255, 255, 0)
-    CINZA = (128, 128, 128)
+    # cache de superfícies para letras do alfabeto (upper)
+    LETTER_SURF = {ch: font.render(ch.upper(), True, BRANCO) for ch in ALPHABET}
 
-    # Configurações da janela
-    largura, altura = 400, 600
-    tela = pygame.display.set_mode((largura, altura))
-    pygame.display.set_caption("Wordle em Português")
+    def render_letter(ch):
+        # fallback se caracter não estiver no alfabeto
+        return LETTER_SURF.get(ch, font.render(ch.upper(), True, BRANCO))
 
-    # Configuração da fonte
-    fonte = pygame.font.Font(None, 60)
+    def desenhar_tela(tentativas, tentativa_atual):
+        screen.fill(PRETO)
 
-    # Função para desenhar a tela do jogo
-    def desenhar_tela():
-        tela.fill(PRETO)
+        # Desenha tentativas anteriores (limita a 6 linhas por segurança)
+        for i, (pal, res) in enumerate(tentativas[:6]):
+            for j, ch in enumerate(pal):
+                x, y = CELL_POS[i][j]
+                cor = VERDE if res[j] == "🟩" else (AMARELO if res[j] == "🟨" else CINZA)
+                pygame.draw.rect(screen, cor, (x, y, CELL, CELL), border_radius=6)
+                surf = render_letter(ch)
+                sw, sh = surf.get_size()
+                screen.blit(surf, (x + (CELL - sw) // 2, y + (CELL - sh) // 2))
 
-        # Desenhar tentativas anteriores
-        for i, tentativa in enumerate(tentativas):
-            for j, letra in enumerate(tentativa[0]):
-                if tentativa[1][j] == "🟩":
-                    cor = VERDE
-                elif tentativa[1][j] == "🟨":
-                    cor = AMARELO
-                else:
-                    cor = CINZA
-                pygame.draw.rect(tela, cor, (j * 60 + 50, i * 80 + 50, 50, 50))
-                texto = fonte.render(letra.upper(), True, BRANCO)
-                tela.blit(texto, (j * 60 + 60, i * 80 + 50))
-
-        # Desenhar a tentativa atual
-        for i, letra in enumerate(tentativa_atual):
-            pygame.draw.rect(
-                tela, CINZA, (i * 60 + 50, len(tentativas) * 80 + 50, 50, 50)
-            )
-            texto = fonte.render(letra.upper(), True, BRANCO)
-            tela.blit(texto, (i * 60 + 60, len(tentativas) * 80 + 50))
+        # Desenha a tentativa atual apenas se houver linha disponível (ou seja, < 6 tentativas já feitas)
+        row = len(tentativas)
+        if row < 6:
+            for j in range(WORD_LEN):
+                x, y = CELL_POS[row][j]
+                pygame.draw.rect(screen, CINZA, (x, y, CELL, CELL), border_radius=6)
+                if j < len(tentativa_atual):
+                    surf = render_letter(tentativa_atual[j])
+                    sw, sh = surf.get_size()
+                    screen.blit(surf, (x + (CELL - sw) // 2, y + (CELL - sh) // 2))
 
         pygame.display.flip()
 
-    # Função para reiniciar o jogo
-    def reiniciar_jogo():
+    # reiniciar estado
+    def reiniciar():
         nonlocal palavra_secreta, tentativas, tentativa_atual, tentativas_restantes, fim_de_jogo, palavras_possiveis
         palavra_secreta = escolher_palavra()
         tentativas = []
         tentativa_atual = ""
         tentativas_restantes = 6
         fim_de_jogo = False
-        palavras_possiveis = [p for p in palavras if len(p) == len(palavra_secreta)]
+        palavras_possiveis = WORDS.copy()
         if ia_jogar:
-            print(f"A IA está jogando. Palavra secreta: {palavra_secreta}")
+            print("IA joga. palavra:", palavra_secreta)
 
-    # Inicializar variáveis do jogo
+    # inicialização
     palavra_secreta = escolher_palavra()
     tentativas = []
     tentativa_atual = ""
     tentativas_restantes = 6
     fim_de_jogo = False
-    palavras_possiveis = [p for p in palavras if len(p) == len(palavra_secreta)]
+    palavras_possiveis = WORDS.copy()
 
     if ia_jogar:
-        print(f"A IA está jogando. Palavra secreta: {palavra_secreta}")
+        print("IA joga. palavra:", palavra_secreta)
 
-    # Loop principal do jogo
-    rodando = True
-    while rodando:
-        for evento in pygame.event.get():
-            if evento.type == pygame.QUIT:
-                rodando = False
+    clock = pygame.time.Clock()
+    next_ai_time = 0  # para agendar ações da IA sem bloquear o loop
 
-            # Processar entrada de teclado durante o jogo
-            if not ia_jogar and evento.type == pygame.KEYDOWN and not fim_de_jogo:
-                if evento.key == pygame.K_BACKSPACE:
+    running = True
+    while running:
+        now = pygame.time.get_ticks()
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                running = False
+
+            if not ia_jogar and ev.type == pygame.KEYDOWN and not fim_de_jogo:
+                if ev.key == pygame.K_BACKSPACE:
                     tentativa_atual = tentativa_atual[:-1]
-                elif evento.key == pygame.K_RETURN and len(tentativa_atual) == len(
-                    palavra_secreta
-                ):
-                    resultado = verificar_palavra(palavra_secreta, tentativa_atual)
+                elif ev.key == pygame.K_RETURN and len(tentativa_atual) == WORD_LEN:
+                    resultado = compute_result_fast(
+                        list(palavra_secreta),
+                        WORD_COUNTS_ARR[WORD_INDEX[palavra_secreta]],
+                        tentativa_atual,
+                    )
                     tentativas.append((tentativa_atual, resultado))
                     tentativas_restantes -= 1
-                    print(tentativas)
                     if tentativa_atual == palavra_secreta:
                         fim_de_jogo = True
-                        print("Parabéns! Você acertou!")
+                        print("Acertou!")
                     elif tentativas_restantes == 0:
                         fim_de_jogo = True
-                        print(f"Fim de jogo! A palavra era {palavra_secreta}.")
+                        print(f"Fim. Palavra: {palavra_secreta}")
                     tentativa_atual = ""
-                elif (
-                    len(tentativa_atual) < len(palavra_secreta)
-                    and evento.unicode.isalpha()
-                ):
-                    tentativa_atual += evento.unicode.lower()
+                elif (len(tentativa_atual) < WORD_LEN) and ev.unicode.isalpha():
+                    tentativa_atual += ev.unicode.lower()
 
-        if ia_jogar and not fim_de_jogo:
+        # IA: executa ações agendadas (não usar time.sleep no loop)
+        if ia_jogar and not fim_de_jogo and now >= next_ai_time:
+            next_ai_time = now + 120  # ms entre ações da IA (~0.12s)
             if tentativas_restantes == 6:
-                time.sleep(0.1)
-                tentativa_atual = melhores_palavras[0]
-                resultado = verificar_palavra(palavra_secreta, tentativa_atual)
+                tentativa_atual = (
+                    melhores_palavras[0] if melhores_palavras else escolher_palavra()
+                )
+                resultado = compute_result_fast(
+                    list(palavra_secreta),
+                    WORD_COUNTS_ARR[WORD_INDEX[palavra_secreta]],
+                    tentativa_atual,
+                )
                 tentativas.append((tentativa_atual, resultado))
                 tentativas_restantes -= 1
                 palavras_possiveis = filtrar_palavras(
                     palavras_possiveis, tentativa_atual, resultado
                 )
-
             else:
                 if palavras_possiveis:
-                    time.sleep(0.1)
                     tentativa_atual = melhor_tentativa(palavras_possiveis)
-                    resultado = verificar_palavra(palavra_secreta, tentativa_atual)
+                    resultado = compute_result_fast(
+                        list(palavra_secreta),
+                        WORD_COUNTS_ARR[WORD_INDEX[palavra_secreta]],
+                        tentativa_atual,
+                    )
                     tentativas.append((tentativa_atual, resultado))
                     tentativas_restantes -= 1
+                    if tentativa_atual == palavra_secreta:
+                        fim_de_jogo = True
+                        print(f"IA acertou em {6 - tentativas_restantes} tentativas")
+                    elif tentativas_restantes == 0:
+                        fim_de_jogo = True
+                        print(f"IA não acertou. Palavra: {palavra_secreta}")
                     palavras_possiveis = filtrar_palavras(
                         palavras_possiveis, tentativa_atual, resultado
                     )
-
-                    if tentativa_atual == palavra_secreta:
-                        fim_de_jogo = True
-                        print(
-                            f"A IA acertou a palavra em {6 - tentativas_restantes} tentativas."
-                        )
-                    elif tentativas_restantes == 0:
-                        fim_de_jogo = True
-                        print(f"A IA não acertou a palavra, que era {palavra_secreta}.")
                     tentativa_atual = ""
                 else:
                     fim_de_jogo = True
-                    print("A IA ficou sem palavras possíveis.")
+                    print("IA sem candidatos.")
 
-        desenhar_tela()
+        desenhar_tela(tentativas, tentativa_atual)
 
         if fim_de_jogo:
-            print("Pressione a barra de espaço para reiniciar ou 'q' para sair.")
-            esperando_entrada = True
-            while esperando_entrada:
-                for evento in pygame.event.get():
-                    if evento.type == pygame.QUIT:
+            print("Pressione Espaço para reiniciar ou Q para sair.")
+            esperando = True
+            while esperando:
+                for ev in pygame.event.get():
+                    if ev.type == pygame.QUIT:
                         pygame.quit()
                         return
-                    if evento.type == pygame.KEYDOWN:
-                        if evento.key == pygame.K_SPACE:
-                            reiniciar_jogo()
-                            esperando_entrada = False
-                        elif evento.key == pygame.K_q:
+                    if ev.type == pygame.KEYDOWN:
+                        if ev.key == pygame.K_SPACE:
+                            reiniciar()
+                            esperando = False
+                        elif ev.key == pygame.K_q:
                             pygame.quit()
                             return
+
+        clock.tick(60)  # limita para 60 FPS
 
     pygame.quit()
 
 
-# Escolha entre jogar manualmente ou com IA
-jogar_wordle(ia_jogar=True)  # True: IA joga, False: Humano joga
+# executar IA por padrão (mude para False para jogar manual)
+if __name__ == "__main__":
+    random.seed()
+    jogar_wordle(ia_jogar=False)

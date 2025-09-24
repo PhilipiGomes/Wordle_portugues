@@ -1,3 +1,5 @@
+melhores_palavras = ["jarro", "sujei"]
+
 # 10587 palavras
 palavras = [
     "ababa",
@@ -10588,5 +10590,3 @@ palavras = [
     "visar",
     "codar",
 ]
-
-melhores_palavras = ["abrem", "cacoo"]

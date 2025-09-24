@@ -21,6 +21,7 @@ ALPHABET_SIZE = len(ALPHABET)
 # lista de listas de chars para acesso rápido
 WORD_CHARS = [list(w) for w in WORDS]
 
+
 def _counts_arr(word):
     arr = [0] * ALPHABET_SIZE
     for ch in word:
@@ -28,6 +29,7 @@ def _counts_arr(word):
         if idx is not None:
             arr[idx] += 1
     return arr
+
 
 WORD_COUNTS_ARR = [_counts_arr(w) for w in WORDS]
 WORD_INDEX = {w: i for i, w in enumerate(WORDS)}
@@ -53,7 +55,6 @@ def compute_result_fast(secret_chars, secret_counts_arr, attempt):
                 res[i] = "🟨"
                 counts[idx] -= 1
     return "".join(res)
-
 
 
 def candidate_matches(candidate, guess, expected_result):
@@ -154,8 +155,12 @@ def encontrar_melhor_palavra_inicial(n_simulacoes_por_palavra, max_workers=None)
     iter_n = [n_simulacoes_por_palavra] * len(candidatos)
     # executor.map aceita várias iterables e passa elementos correspondentes às posições dos parâmetros
     with ProcessPoolExecutor(max_workers=max_workers) as exc:
-        for res in tqdm(exc.map(simular_jogos_com_palavra_inicial, iter_n, candidatos),
-                        total=len(candidatos), desc="Simulando", ncols=100):
+        for res in tqdm(
+            exc.map(simular_jogos_com_palavra_inicial, iter_n, candidatos),
+            total=len(candidatos),
+            desc="Simulando",
+            ncols=100,
+        ):
             resultados.append(res)
 
         melhores = sorted(resultados, key=lambda x: x[1])
