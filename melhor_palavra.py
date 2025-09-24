@@ -1,10 +1,12 @@
+import os
 import random
 import time
 from collections import Counter
-from lista import palavras
-import os
-from tqdm import tqdm  # Importando a biblioteca tqdm para barras de progresso
 from concurrent.futures import ProcessPoolExecutor  # Para paralelização
+
+from tqdm import tqdm  # Importando a biblioteca tqdm para barras de progresso
+
+from lista import palavras
 
 
 # Funções auxiliares

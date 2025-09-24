@@ -1,8 +1,10 @@
 import random
-import pygame
 import time
 from collections import Counter
-from lista import palavras, melhor_palavra
+
+import pygame
+
+from lista import melhores_palavras, palavras
 
 
 # Funções auxiliares
@@ -24,9 +26,14 @@ def verificar_palavra(palavra_secreta, tentativa):
 
     # Segunda passada: marca os acertos parciais (🟨)
     for i in range(len(tentativa)):
-        if tentativa_lista[i] is not None and tentativa_lista[i] in palavra_secreta_lista:
+        if (
+            tentativa_lista[i] is not None
+            and tentativa_lista[i] in palavra_secreta_lista
+        ):
             resultado[i] = "🟨"
-            palavra_secreta_lista[palavra_secreta_lista.index(tentativa_lista[i])] = None
+            palavra_secreta_lista[palavra_secreta_lista.index(tentativa_lista[i])] = (
+                None
+            )
 
     return "".join(resultado)
 
@@ -113,7 +120,6 @@ def jogar_wordle(ia_jogar=False):
 
     # Configuração da fonte
     fonte = pygame.font.Font(None, 60)
-    fonte_pequena = pygame.font.Font(None, 40)
 
     # Função para desenhar a tela do jogo
     def desenhar_tela():
@@ -134,7 +140,9 @@ def jogar_wordle(ia_jogar=False):
 
         # Desenhar a tentativa atual
         for i, letra in enumerate(tentativa_atual):
-            pygame.draw.rect(tela, CINZA, (i * 60 + 50, len(tentativas) * 80 + 50, 50, 50))
+            pygame.draw.rect(
+                tela, CINZA, (i * 60 + 50, len(tentativas) * 80 + 50, 50, 50)
+            )
             texto = fonte.render(letra.upper(), True, BRANCO)
             tela.blit(texto, (i * 60 + 60, len(tentativas) * 80 + 50))
 
@@ -174,7 +182,9 @@ def jogar_wordle(ia_jogar=False):
             if not ia_jogar and evento.type == pygame.KEYDOWN and not fim_de_jogo:
                 if evento.key == pygame.K_BACKSPACE:
                     tentativa_atual = tentativa_atual[:-1]
-                elif evento.key == pygame.K_RETURN and len(tentativa_atual) == len(palavra_secreta):
+                elif evento.key == pygame.K_RETURN and len(tentativa_atual) == len(
+                    palavra_secreta
+                ):
                     resultado = verificar_palavra(palavra_secreta, tentativa_atual)
                     tentativas.append((tentativa_atual, resultado))
                     tentativas_restantes -= 1
@@ -186,17 +196,22 @@ def jogar_wordle(ia_jogar=False):
                         fim_de_jogo = True
                         print(f"Fim de jogo! A palavra era {palavra_secreta}.")
                     tentativa_atual = ""
-                elif len(tentativa_atual) < len(palavra_secreta) and evento.unicode.isalpha():
+                elif (
+                    len(tentativa_atual) < len(palavra_secreta)
+                    and evento.unicode.isalpha()
+                ):
                     tentativa_atual += evento.unicode.lower()
 
         if ia_jogar and not fim_de_jogo:
             if tentativas_restantes == 6:
                 time.sleep(0.1)
-                tentativa_atual = melhor_palavra[0]
+                tentativa_atual = melhores_palavras[0]
                 resultado = verificar_palavra(palavra_secreta, tentativa_atual)
                 tentativas.append((tentativa_atual, resultado))
                 tentativas_restantes -= 1
-                palavras_possiveis = filtrar_palavras(palavras_possiveis, tentativa_atual, resultado)
+                palavras_possiveis = filtrar_palavras(
+                    palavras_possiveis, tentativa_atual, resultado
+                )
 
             else:
                 if palavras_possiveis:
@@ -205,11 +220,15 @@ def jogar_wordle(ia_jogar=False):
                     resultado = verificar_palavra(palavra_secreta, tentativa_atual)
                     tentativas.append((tentativa_atual, resultado))
                     tentativas_restantes -= 1
-                    palavras_possiveis = filtrar_palavras(palavras_possiveis, tentativa_atual, resultado)
+                    palavras_possiveis = filtrar_palavras(
+                        palavras_possiveis, tentativa_atual, resultado
+                    )
 
                     if tentativa_atual == palavra_secreta:
                         fim_de_jogo = True
-                        print(f"A IA acertou a palavra em {6 - tentativas_restantes} tentativas.")
+                        print(
+                            f"A IA acertou a palavra em {6 - tentativas_restantes} tentativas."
+                        )
                     elif tentativas_restantes == 0:
                         fim_de_jogo = True
                         print(f"A IA não acertou a palavra, que era {palavra_secreta}.")
