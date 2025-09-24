@@ -177,7 +177,7 @@ if __name__ == "__main__":
     os.system("cls" if os.name == "nt" else "clear")
     random.seed()
 
-    numero_de_jogos = 4000
+    numero_de_jogos = 10000
     # ajuste max_workers conforme CPU; None => usa default do executor
     resultados = simular_jogos_parallel(numero_de_jogos, max_workers=None, chunksize=4)
 
@@ -186,7 +186,7 @@ if __name__ == "__main__":
         (sum(resultados) / jogos_ganhos) if jogos_ganhos > 0 else float("nan")
     )
     print(
-        f"Jogos simulados: {numero_de_jogos}, Jogos ganhos: {jogos_ganhos}, porgentágem de vitórias: {(jogos_ganhos/numero_de_jogos)*100}"
+        f"Jogos simulados: {numero_de_jogos}, Jogos ganhos: {jogos_ganhos}, porcentagem de vitórias: {(jogos_ganhos/numero_de_jogos)*100}%"
     )
     mp = melhores_palavras[0] if melhores_palavras else "<sem_melhor>"
     print(f"Média de tentativas da palavra {mp}: {media_melhores_palavras:.6f}")
