@@ -9,6 +9,7 @@ from lista import melhores_palavras, palavras
 
 # Funções auxiliares
 def escolher_palavra():
+    # trunk-ignore(bandit/B311)
     return random.choice(palavras)
 
 

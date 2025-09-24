@@ -10589,4 +10589,4 @@ palavras = [
     "codar",
 ]
 
-melhores_palavras = ["moina", "dondo"]
+melhores_palavras = ["abrem", "cacoo"]

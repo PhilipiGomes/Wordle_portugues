@@ -2,185 +2,186 @@ import os
 import random
 import time
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor  # Para paralelização
+from concurrent.futures import ProcessPoolExecutor
 
-from tqdm import tqdm  # Importando a biblioteca tqdm para barras de progresso
+from tqdm import tqdm
 
-from lista import palavras
+from lista import palavras  # todas têm mesmo comprimento e já estão em minúsculas
+
+# --- Pré-processamento robusto (suporta acentos/ç/qualquer caractere presente nas palavras) ---
+WORDS = palavras  # já em minúsculas e mesmo comprimento
+N_WORDS = len(WORDS)
+WORD_LEN = len(WORDS[0]) if N_WORDS else 0
+
+# conjunto do alfabeto presente nas palavras (ordenado só para determinismo)
+ALPHABET = sorted({ch for w in WORDS for ch in w})
+ALPHABET_IDX = {ch: i for i, ch in enumerate(ALPHABET)}
+ALPHABET_SIZE = len(ALPHABET)
+
+# lista de listas de chars para acesso rápido
+WORD_CHARS = [list(w) for w in WORDS]
+
+def _counts_arr(word):
+    arr = [0] * ALPHABET_SIZE
+    for ch in word:
+        idx = ALPHABET_IDX.get(ch)
+        if idx is not None:
+            arr[idx] += 1
+    return arr
+
+WORD_COUNTS_ARR = [_counts_arr(w) for w in WORDS]
+WORD_INDEX = {w: i for i, w in enumerate(WORDS)}
 
 
-# Funções auxiliares
-def escolher_palavra(tamanho=None):
-    filtro = [p.lower() for p in palavras if len(p) == (tamanho if tamanho else len(palavras[0]))]
-    return random.choice(filtro)
+# --- Funções otimizadas ---
+def compute_result_fast(secret_chars, secret_counts_arr, attempt):
+    """Gera padrão sem assumir 'a'..'z' — usa ALPHABET_IDX."""
+    res = ["⬜"] * WORD_LEN
+    counts = secret_counts_arr[:]  # copia
+    # verdes
+    for i, ch in enumerate(attempt):
+        if ch == secret_chars[i]:
+            res[i] = "🟩"
+            idx = ALPHABET_IDX.get(ch)
+            if idx is not None:
+                counts[idx] -= 1
+    # amarelos
+    for i, ch in enumerate(attempt):
+        if res[i] == "⬜":
+            idx = ALPHABET_IDX.get(ch)
+            if idx is not None and counts[idx] > 0:
+                res[i] = "🟨"
+                counts[idx] -= 1
+    return "".join(res)
 
 
-def verificar_palavra(palavra_secreta, tentativa):
-    palavra_secreta = palavra_secreta.lower()
-    tentativa = tentativa.lower()
 
-    if len(palavra_secreta) != len(tentativa):
-        raise ValueError("A tentativa e a palavra secreta devem ter o mesmo comprimento.")
-
-    resultado = ["⬜"] * len(tentativa)
-    contador_palavra = Counter(palavra_secreta)
-    palavra_secreta_lista = list(palavra_secreta)
-
-    for i, (p, t) in enumerate(zip(palavra_secreta, tentativa)):
-        if t == p:
-            resultado[i] = "🟩"
-            contador_palavra[t] -= 1
-            palavra_secreta_lista[i] = None
-
-    for i, t in enumerate(tentativa):
-        if resultado[i] != "🟩" and t in palavra_secreta_lista:
-            if contador_palavra[t] > 0:
-                resultado[i] = "🟨"
-                contador_palavra[t] -= 1
-                palavra_secreta_lista[palavra_secreta_lista.index(t)] = None
-
-    return "".join(resultado)
+def candidate_matches(candidate, guess, expected_result):
+    """Verifica se candidate (segredo) produz expected_result para guess."""
+    idx = WORD_INDEX[candidate]
+    secret_chars = WORD_CHARS[idx]
+    secret_counts = WORD_COUNTS_ARR[idx]
+    return compute_result_fast(secret_chars, secret_counts, guess) == expected_result
 
 
 def filtrar_palavras(lista_palavras, tentativa, resultado):
-    tentativa = tentativa.lower()
-    palavras_filtradas = []
-
-    for palavra in lista_palavras:
-        palavra = palavra.lower()
-        palavra_valida = True
-        letras_confirmadas = Counter()
-        letras_invalidas = set()
-
-        for i in range(len(tentativa)):
-            if resultado[i] == "🟩":
-                if palavra[i] != tentativa[i]:
-                    palavra_valida = False
-                    break
-                letras_confirmadas[tentativa[i]] += 1
-
-        if not palavra_valida:
-            continue
-
-        for i in range(len(tentativa)):
-            if resultado[i] == "🟨":
-                if tentativa[i] not in palavra or palavra[i] == tentativa[i]:
-                    palavra_valida = False
-                    break
-                letras_confirmadas[tentativa[i]] += 1
-
-        if not palavra_valida:
-            continue
-
-        for i in range(len(tentativa)):
-            if resultado[i] == "⬜":
-                if tentativa[i] in palavra and palavra.count(tentativa[i]) > letras_confirmadas[tentativa[i]]:
-                    palavra_valida = False
-                    break
-                letras_invalidas.add(tentativa[i])
-
-        if palavra_valida:
-            palavras_filtradas.append(palavra)
-
-    return palavras_filtradas
+    """Mantém só candidatos que geram 'resultado' para 'tentativa'."""
+    # list comprehension simples chamando candidate_matches (muito rápido com pré-cálculos)
+    return [p for p in lista_palavras if candidate_matches(p, tentativa, resultado)]
 
 
 def melhor_tentativa(palavras_possiveis):
     if not palavras_possiveis:
         return ""
+    # contadores posicionais
+    pos_counters = [Counter() for _ in range(WORD_LEN)]
+    for w in palavras_possiveis:
+        for i, ch in enumerate(w):
+            pos_counters[i][ch] += 1
 
-    contador_posicional = [Counter() for _ in range(len(palavras_possiveis[0]))]
+    def score(word):
+        s = 0
+        for i, ch in enumerate(word):
+            s += pos_counters[i].get(ch, 0)
+        return s
 
-    for palavra in palavras_possiveis:
-        for i, letra in enumerate(palavra):
-            contador_posicional[i][letra] += 1
-
-    def pontuar_palavra(palavra):
-        return sum(contador_posicional[i][letra] for i, letra in enumerate(palavra))
-
-    return max(palavras_possiveis, key=pontuar_palavra)
+    return max(palavras_possiveis, key=score)
 
 
+def escolher_palavra(tamanho=None):
+    # todas mesmas, ignora tamanho
+    # trunk-ignore(bandit/B311)
+    return random.choice(WORDS)
+
+
+# --- Simulação de um jogo com IA ---
 def jogar_wordle(ia_jogar=False, palavra_inicial=None):
     palavra_secreta = escolher_palavra()
-    tentativas = []
+    idx_secret = WORD_INDEX[palavra_secreta]
+    secret_chars = WORD_CHARS[idx_secret]
+    secret_counts = WORD_COUNTS_ARR[idx_secret]
+
     tentativas_restantes = 6
-    palavras_possiveis = [p for p in palavras if len(p) == len(palavra_secreta)]
+    palavras_possiveis = WORDS.copy()
+    tentativas_usadas = 0
 
     while tentativas_restantes > 0:
-        if ia_jogar:
-            if tentativas_restantes == 6:
-                tentativa_atual = palavra_inicial or escolher_palavra(tamanho=len(palavra_secreta))
-            else:
-                tentativa_atual = melhor_tentativa(palavras_possiveis)
+        if not ia_jogar:
+            return None
 
-            resultado = verificar_palavra(palavra_secreta, tentativa_atual)
-            tentativas.append((tentativa_atual, resultado))
-            tentativas_restantes -= 1
-            palavras_possiveis = filtrar_palavras(palavras_possiveis, tentativa_atual, resultado)
-
-            if tentativa_atual == palavra_secreta:
-                return 6 - tentativas_restantes
+        if tentativas_restantes == 6:
+            tentativa_atual = palavra_inicial or escolher_palavra()
         else:
-            break
+            tentativa_atual = melhor_tentativa(palavras_possiveis)
+
+        resultado = compute_result_fast(secret_chars, secret_counts, tentativa_atual)
+        tentativas_restantes -= 1
+        tentativas_usadas += 1
+
+        if tentativa_atual == palavra_secreta:
+            return tentativas_usadas
+
+        palavras_possiveis = filtrar_palavras(
+            palavras_possiveis, tentativa_atual, resultado
+        )
+        if not palavras_possiveis:
+            return None
+
     return None
 
 
-# Função para simular os jogos
-def simular_jogos_com_palavra_inicial_func(palavra_inicial, n_simulacoes_por_palavra):
-    return (palavra_inicial, simular_jogos_com_palavra_inicial(n_simulacoes_por_palavra, palavra_inicial))
-
+# --- Estatísticas por palavra inicial ---
 def simular_jogos_com_palavra_inicial(n, palavra_inicial):
     resultados = []
     for _ in range(n):
-        tentativas_usadas = jogar_wordle(ia_jogar=True, palavra_inicial=palavra_inicial)
-        if tentativas_usadas is not None:
-            resultados.append(tentativas_usadas)
-    return (sum(resultados) / len(resultados)) if len(resultados) > 0 else sum(resultados)
+        usadas = jogar_wordle(ia_jogar=True, palavra_inicial=palavra_inicial)
+        if usadas is not None:
+            resultados.append(usadas)
+    if resultados:
+        return palavra_inicial, (sum(resultados) / len(resultados))
+    return palavra_inicial, float("inf")
 
 
-# Função auxiliar para ser usada no `map` (evita o uso de `lambda`)
-def map_simular_palavra(palavra, n_simulacoes_por_palavra):
-    return simular_jogos_com_palavra_inicial_func(palavra, n_simulacoes_por_palavra)
+def _map_worker(args):
+    return simular_jogos_com_palavra_inicial(*args)
 
-def encontrar_melhor_palavra_inicial(n_simulacoes_por_palavra):
+
+def encontrar_melhor_palavra_inicial(n_simulacoes_por_palavra, max_workers=None):
     start = time.time()
+    candidatos = WORDS
+    resultados = []
+    # cria dois iteráveis paralelos: primeiro argumento (n_sim) e segundo (palavra)
+    iter_n = [n_simulacoes_por_palavra] * len(candidatos)
+    # executor.map aceita várias iterables e passa elementos correspondentes às posições dos parâmetros
+    with ProcessPoolExecutor(max_workers=max_workers) as exc:
+        for res in tqdm(exc.map(simular_jogos_com_palavra_inicial, iter_n, candidatos),
+                        total=len(candidatos), desc="Simulando", ncols=100):
+            resultados.append(res)
 
-    melhores_palavras = []
-    
-    # Paralelizando a simulação com ProcessPoolExecutor
-    with ProcessPoolExecutor() as executor:
-        # Substituímos a função lambda pela função auxiliar
-        resultados = list(tqdm(executor.map(map_simular_palavra, palavras, [n_simulacoes_por_palavra]*len(palavras)), desc="Simulando jogos", ncols=100, total=len(palavras)))
+        melhores = sorted(resultados, key=lambda x: x[1])
+        piores = sorted(resultados, key=lambda x: x[1], reverse=True)
 
-    # Organiza as palavras por melhor desempenho
-    melhores_palavras = sorted(resultados, key=lambda x: x[1])
-    piores_palavras = sorted(resultados, key=lambda x: x[1], reverse=True)
-
-    finish = time.time()
-    elapsed = finish - start
-    os.system('cls')
-    horas = elapsed // 3600
-    minutos = (elapsed - (horas * 3600)) // 60
-    segundos = (elapsed - ((horas * 3600) + (minutos * 60)))
-    print(f"Tempo total: {int(horas)}h, {int(minutos)}min, {segundos:.5f}s")
-    print(f'Média por simulação: {elapsed / len(palavras) / n_simulacoes_por_palavra:.5f}s')
-    print()
-    print(f'Média por palavra: {elapsed / len(palavras):.5f}s')
-    return melhores_palavras, piores_palavras
+    elapsed = time.time() - start
+    # trunk-ignore(bandit/B605)
+    os.system("cls" if os.name == "nt" else "clear")
+    h = int(elapsed // 3600)
+    m = int((elapsed % 3600) // 60)
+    s = elapsed % 60
+    print(f"Tempo total: {h}h {m}min {s:.3f}s")
+    avg = elapsed / (len(candidatos) * n_simulacoes_por_palavra)
+    print(f"Média por simulação: {avg:.6f}s")
+    return melhores, piores
 
 
+# --- Execução ---
 if __name__ == "__main__":
-    os.system('cls')
+    # trunk-ignore(bandit/B605)
+    os.system("cls" if os.name == "nt" else "clear")
+    random.seed()
     n_simulacoes = 10
-    melhores_palavras, piores_palavras = encontrar_melhor_palavra_inicial(n_simulacoes)
+    melhores, piores = encontrar_melhor_palavra_inicial(n_simulacoes)
     print()
-    print(f"As 3 melhores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in melhores_palavras[:3]]}")
-    print()
-    print(f'Melhor palavra: {[melhores_palavras[0][0]]}')
-    print()
-    print(f"As 3 piores palavras iniciais de acordo com o teste são:{'\n'}{[(palavra, pontuacao) for palavra, pontuacao in piores_palavras[:3]]}")
-    print()
-    print(f'Pior palavra: {[piores_palavras[0][0]]}')
-    print()
-    print([melhores_palavras[0][0], piores_palavras[0][0]])
+    print("Top 3 melhores:", melhores[:3])
+    print("Melhor:", melhores[0][0])
+    print("Top 3 piores:", piores[:3])
+    print("Pior:", piores[0][0])
